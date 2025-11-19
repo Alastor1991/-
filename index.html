@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Адский Хаб | Hazbin & Helluva Community</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Nosifer&family=Permanent+Marker&family=Rye&family=Inter:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              'demon': ['"Rye"', 'serif'],
+              'drip': ['"Nosifer"', 'cursive'],
+              'marker': ['"Permanent Marker"', 'cursive'],
+              'elegant': ['"Cinzel Decorative"', 'serif'],
+              'body': ['"Inter"', 'sans-serif'],
+              'tech': ['"Share Tech Mono"', 'monospace'],
+            },
+            colors: {
+              'hell-bg': '#050a14', 
+              'hell-card': '#0d1117',
+              'neon-red': '#ff003c', 
+              'neon-pink': '#ff00cc', 
+              'neon-green': '#39ff14', 
+              'neon-blue': '#00f7ff', 
+              'neon-purple': '#bc13fe',
+              'gold': '#ffd700',
+              'vox-dark': '#080e1a', 
+              'vox-panel': '#0f172a',
+            },
+            backgroundImage: {
+              'stripes': "repeating-linear-gradient(45deg, #0d1117, #0d1117 10px, #161b22 10px, #161b22 20px)",
+              'tv-grid': "linear-gradient(rgba(0, 247, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 247, 255, 0.03) 1px, transparent 1px)",
+              'radial-glow': "radial-gradient(circle at center, #0f2040 0%, #050a14 100%)",
+            },
+            animation: {
+              'glitch': 'glitch 0.5s infinite',
+              'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'spin-slow': 'spin 12s linear infinite',
+              'float': 'float 6s ease-in-out infinite',
+              'fade-in': 'fadeIn 0.5s ease-out forwards',
+              'border-glow': 'borderGlow 3s infinite',
+            },
+            keyframes: {
+              glitch: {
+                '0%': { transform: 'translate(0)' },
+                '20%': { transform: 'translate(-2px, 2px)' },
+                '40%': { transform: 'translate(-2px, -2px)' },
+                '60%': { transform: 'translate(2px, 2px)' },
+                '80%': { transform: 'translate(2px, -2px)' },
+                '100%': { transform: 'translate(0)' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              },
+              fadeIn: {
+                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              borderGlow: {
+                '0%, 100%': { borderColor: 'rgba(0, 247, 255, 0.2)' },
+                '50%': { borderColor: 'rgba(0, 247, 255, 0.8)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #050a14;
+        color: #e2e8f0;
+        overflow-x: hidden;
+      }
+      ::selection { background: #00f7ff; color: #000; }
+      
+      /* Electric Scrollbar */
+      ::-webkit-scrollbar { width: 10px; }
+      ::-webkit-scrollbar-track { background: #050a14; border-left: 1px solid #1e293b; }
+      ::-webkit-scrollbar-thumb { background: #1e293b; border: 1px solid #00f7ff; border-radius: 0; }
+      ::-webkit-scrollbar-thumb:hover { background: #00f7ff; box-shadow: 0 0 10px #00f7ff; }
+      
+      .text-glow { text-shadow: 0 0 5px #ff003c, 0 0 10px #ff003c; }
+      .text-glow-blue { text-shadow: 0 0 5px #00f7ff, 0 0 15px #00f7ff; }
+      .box-glow-blue { box-shadow: 0 0 15px rgba(0, 247, 255, 0.15); }
+      
+      .tv-grid-bg {
+        background-size: 40px 40px;
+        background-image: linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+                          linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+        /* Widened mask to 70% to prevent dark edges */
+        mask-image: radial-gradient(circle at center, black 70%, rgba(0,0,0,0.3) 100%);
+      }
+
+      .glass-panel {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "vite": "https://aistudiocdn.com/vite@^7.2.2",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
