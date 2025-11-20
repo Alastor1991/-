@@ -187,7 +187,7 @@ interface DB {
     currentUser: string | null; // username
 }
 
-const DB_KEY = 'HELLS_HUB_DB_V3'; // Bumped version
+const DB_KEY = 'HELLS_HUB_DB_V4'; // Bumped version to clear cache logic
 
 // Helper to simulate network delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -219,10 +219,14 @@ class BackendService {
         const stored = localStorage.getItem(DB_KEY);
         if (stored) {
             this.db = JSON.parse(stored);
+            // If storing empty or old version without communities, seed them
+            if (!this.db.communities || this.db.communities.length === 0) {
+                this.db.communities = SEED_COMMUNITIES;
+            }
+            // Fix for seed episodes if missing
             if (!this.db.episodes) this.db.episodes = SEED_EPISODES;
-            // Merge seed posts if needed or just keep DB ones. For dev, we re-seed if empty
+            // Fix for posts
             if (!this.db.posts || this.db.posts.length === 0) this.db.posts = SEED_POSTS;
-            this.db.communities = SEED_COMMUNITIES;
         } else {
             this.db = {
                 users: [],
@@ -351,6 +355,17 @@ class BackendService {
 
     async getCommunities(): Promise<Community[]> {
         return this.db.communities;
+    }
+
+    async createCommunity(community: Community): Promise<Community> {
+        await delay(600);
+        // Ensure no duplicates ID
+        if (this.db.communities.find(c => c.id === community.id)) {
+            throw new Error("Community ID already exists");
+        }
+        this.db.communities.push(community);
+        this.save();
+        return community;
     }
 
     async getPosts(): Promise<ForumPost[]> {

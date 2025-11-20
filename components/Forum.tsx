@@ -183,7 +183,10 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [selectedCommunityId, setSelectedCommunityId] = useState<string>('all');
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
+  
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreateCommunityModalOpen, setIsCreateCommunityModalOpen] = useState(false);
+
   const [loading, setLoading] = useState(true);
   
   // Filter & Sort State
@@ -195,6 +198,11 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
   const [newContent, setNewContent] = useState('');
   const [newImage, setNewImage] = useState('');
   const [postCommunityId, setPostCommunityId] = useState('');
+
+  // New Community State
+  const [newCommName, setNewCommName] = useState('');
+  const [newCommDesc, setNewCommDesc] = useState('');
+  const [newCommIcon, setNewCommIcon] = useState('📢');
 
   // Comment State
   const [commentText, setCommentText] = useState('');
@@ -285,6 +293,36 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
     } catch (e) {
         console.error("Failed to create post", e);
     }
+  };
+
+  const handleCreateCommunity = async () => {
+      if (!newCommName.trim() || !newCommDesc.trim()) return;
+      
+      // Ensure name starts with 'r/' for consistency if user forgets
+      let finalName = newCommName.trim();
+      if (!finalName.startsWith('r/')) finalName = 'r/' + finalName;
+
+      const newCommId = finalName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      
+      const newCommunity: Community = {
+          id: newCommId,
+          name: finalName,
+          description: newCommDesc,
+          icon: newCommIcon || '📡',
+          color: 'text-neon-green' // Default user communities to green to distinguish
+      };
+
+      try {
+          const created = await backend.createCommunity(newCommunity);
+          setCommunities([...communities, created]);
+          setIsCreateCommunityModalOpen(false);
+          setNewCommName('');
+          setNewCommDesc('');
+          setSelectedCommunityId(created.id); // Switch to new community
+      } catch (e) {
+          console.error("Failed to create community", e);
+          alert("Failed to create channel. It might already exist.");
+      }
   };
 
   const handlePostComment = async () => {
@@ -403,19 +441,31 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
           {/* LEFT SIDEBAR (Communities) */}
           <div className="hidden md:block md:col-span-3 lg:col-span-2 px-2">
               <div className="sticky top-24 space-y-2">
-                  <div className="text-[10px] text-neon-blue font-bold px-3 mb-3 uppercase tracking-[0.2em] border-b border-neon-blue/20 pb-2">Channels</div>
-                  {communities.map(c => (
-                      <button
-                          key={c.id}
-                          onClick={() => { setSelectedCommunityId(c.id); setSelectedPost(null); window.scrollTo({top:0}); }}
-                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-r-xl border-l-4 transition-all duration-200 group ${selectedCommunityId === c.id ? 'bg-gradient-to-r from-neon-blue/20 to-transparent border-neon-blue text-white' : 'border-transparent hover:bg-white/5 text-gray-400 hover:text-white hover:border-gray-500'}`}
-                      >
-                          <span className={`text-xl group-hover:scale-110 transition-transform duration-300 filter drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]`}>{c.icon}</span>
-                          <span className={`text-sm font-bold font-tech tracking-wide ${selectedCommunityId === c.id ? 'text-neon-blue' : ''}`}>{c.name}</span>
-                      </button>
-                  ))}
+                  <div className="flex justify-between items-end px-3 mb-3 border-b border-neon-blue/20 pb-2">
+                    <div className="text-[10px] text-neon-blue font-bold uppercase tracking-[0.2em]">Channels</div>
+                    <button 
+                        onClick={() => setIsCreateCommunityModalOpen(true)}
+                        className="text-[10px] bg-neon-blue/10 hover:bg-neon-blue text-neon-blue hover:text-black font-bold px-2 py-0.5 rounded transition-colors uppercase tracking-wider"
+                        title="Create New Channel"
+                    >
+                        + New
+                    </button>
+                  </div>
                   
-                  <div className="my-6 pt-4 px-2">
+                  <div className="max-h-[60vh] overflow-y-auto custom-scrollbar space-y-1">
+                    {communities.map(c => (
+                        <button
+                            key={c.id}
+                            onClick={() => { setSelectedCommunityId(c.id); setSelectedPost(null); window.scrollTo({top:0}); }}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-r-xl border-l-4 transition-all duration-200 group ${selectedCommunityId === c.id ? 'bg-gradient-to-r from-neon-blue/20 to-transparent border-neon-blue text-white' : 'border-transparent hover:bg-white/5 text-gray-400 hover:text-white hover:border-gray-500'}`}
+                        >
+                            <span className={`text-xl group-hover:scale-110 transition-transform duration-300 filter drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]`}>{c.icon}</span>
+                            <span className={`text-sm font-bold font-tech tracking-wide truncate ${selectedCommunityId === c.id ? 'text-neon-blue' : ''}`}>{c.name}</span>
+                        </button>
+                    ))}
+                  </div>
+                  
+                  <div className="my-6 pt-4 px-2 border-t border-white/5">
                       <button 
                          onClick={() => setIsCreateModalOpen(true)}
                          className="w-full relative overflow-hidden group bg-transparent border border-neon-blue text-neon-blue font-bold py-3 rounded uppercase tracking-[0.2em] text-xs transition-all hover:text-black"
@@ -761,6 +811,78 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                           disabled={!newTitle.trim() || !postCommunityId}
                       >
                           Broadcast
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* CREATE COMMUNITY MODAL */}
+      {isCreateCommunityModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in" onClick={() => setIsCreateCommunityModalOpen(false)}>
+              <div 
+                  className="bg-[#0f172a] w-full max-w-lg border border-neon-green/30 rounded-xl shadow-[0_0_50px_rgba(57,255,20,0.1)] overflow-hidden flex flex-col"
+                  onClick={e => e.stopPropagation()}
+              >
+                  <div className="p-4 border-b border-white/5 flex justify-between items-center bg-black/50">
+                      <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-neon-green animate-pulse rounded-full"></div>
+                          <h3 className="text-white font-tech text-lg tracking-widest uppercase text-neon-green">Establish New Node</h3>
+                      </div>
+                      <button onClick={() => setIsCreateCommunityModalOpen(false)} className="text-gray-500 hover:text-neon-green text-2xl">&times;</button>
+                  </div>
+                  
+                  <div className="p-6 overflow-y-auto bg-tv-grid">
+                      <div className="mb-4">
+                           <label className="text-[10px] uppercase text-neon-green/70 font-bold tracking-widest mb-1 block">Channel Designation</label>
+                           <div className="relative">
+                                <input 
+                                    className="w-full bg-black/50 border border-gray-700 rounded p-3 pl-8 text-white focus:border-neon-green focus:outline-none font-bold placeholder-gray-600 transition-colors font-mono"
+                                    placeholder="r/YourChannel"
+                                    value={newCommName}
+                                    onChange={e => setNewCommName(e.target.value)}
+                                    autoFocus
+                                />
+                                <div className="absolute left-3 top-3 text-gray-500 font-mono">#</div>
+                           </div>
+                           <p className="text-[9px] text-gray-500 mt-1">Will be formatted as r/Name</p>
+                      </div>
+                      
+                      <div className="mb-4">
+                           <label className="text-[10px] uppercase text-neon-green/70 font-bold tracking-widest mb-1 block">Node Icon (Emoji)</label>
+                           <input 
+                               className="w-16 bg-black/50 border border-gray-700 rounded p-3 text-center text-2xl text-white focus:border-neon-green focus:outline-none transition-colors"
+                               placeholder="📡"
+                               maxLength={2}
+                               value={newCommIcon}
+                               onChange={e => setNewCommIcon(e.target.value)}
+                           />
+                      </div>
+
+                      <div className="mb-2">
+                          <label className="text-[10px] uppercase text-neon-green/70 font-bold tracking-widest mb-1 block">Description</label>
+                          <textarea 
+                              className="w-full h-24 bg-black/50 border border-gray-700 rounded p-4 text-white focus:border-neon-green focus:outline-none mb-2 transition-colors font-mono text-sm resize-none placeholder-gray-600"
+                              placeholder="Define the purpose of this frequency..."
+                              value={newCommDesc}
+                              onChange={e => setNewCommDesc(e.target.value)}
+                          />
+                      </div>
+                  </div>
+
+                  <div className="p-4 border-t border-white/5 bg-black/50 flex justify-end gap-3">
+                      <button 
+                          onClick={() => setIsCreateCommunityModalOpen(false)}
+                          className="px-6 py-2 rounded border border-gray-700 text-gray-400 font-bold hover:bg-white/5 hover:text-white transition-colors uppercase text-xs tracking-[0.2em]"
+                      >
+                          Cancel
+                      </button>
+                      <button 
+                          onClick={handleCreateCommunity}
+                          className={`px-8 py-2 rounded bg-neon-green text-black font-bold hover:bg-white hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] transition-all uppercase text-xs tracking-[0.2em] ${(!newCommName.trim() || !newCommDesc.trim()) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          disabled={!newCommName.trim() || !newCommDesc.trim()}
+                      >
+                          Initialize
                       </button>
                   </div>
               </div>
