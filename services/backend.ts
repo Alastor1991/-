@@ -1,5 +1,5 @@
 
-import { UserProfile, ForumPost, Episode, Review, Universe, Comment, Community, Notification } from '../types';
+import { UserProfile, ForumPost, Episode, Review, Universe, Comment, Community, Notification, EpisodeComment } from '../types';
 
 // --- SEED COMMUNITIES ---
 const SEED_COMMUNITIES: Community[] = [
@@ -71,7 +71,8 @@ const SEED_EPISODES: Episode[] = [
     reviews: [
       { id: 'r1', user: 'VaggieLover', rating: 10, comment: 'Идеальное начало!', timestamp: '1 day ago' },
       { id: 'r2', user: 'RadioHater', rating: 2, comment: 'Слишком много песен.', timestamp: '2 days ago' }
-    ]
+    ],
+    comments: []
   },
   {
     id: 'h2',
@@ -84,7 +85,8 @@ const SEED_EPISODES: Episode[] = [
     synopsis: "Противостояние старых медиа и новых технологий. Аластор показывает зубки, а Вокс теряет сигнал.",
     reviews: [
         { id: 'r3', user: 'VoxTech_Official', rating: 1, comment: 'ПОЛНЫЙ ОТСТОЙ. ПОМЕХИ В ЭФИРЕ.', timestamp: '1 hour ago' }
-    ]
+    ],
+    comments: []
   },
   {
     id: 'hb1',
@@ -97,7 +99,8 @@ const SEED_EPISODES: Episode[] = [
     synopsis: "Блиц и компания отправляются на Землю, чтобы убить цель, но сталкиваются с семьей маньяков.",
     reviews: [
         { id: 'r4', user: 'Moxxie', rating: 7, comment: 'Было немного жестоко, сэр.', timestamp: '1 year ago' }
-    ]
+    ],
+    comments: []
   },
   {
     id: 'hb2',
@@ -110,7 +113,8 @@ const SEED_EPISODES: Episode[] = [
     synopsis: "Октавия и Столас пытаются наладить отношения в парке развлечений.",
     reviews: [
         { id: 'r5', user: 'Octavia_Goetia', rating: 9, comment: 'Ненавижу этот парк, но папа старался.', timestamp: '5 months ago' }
-    ]
+    ],
+    comments: []
   },
     {
     id: 'hb3',
@@ -123,7 +127,8 @@ const SEED_EPISODES: Episode[] = [
     synopsis: "Физзаролли и Блиц оказываются в ловушке и вынуждены выяснить отношения.",
     reviews: [
         { id: 'r6', user: 'Asmodeus', rating: 10, comment: 'Мой Физзи был великолепен!', timestamp: '1 week ago' }
-    ]
+    ],
+    comments: []
   }
 ];
 
@@ -247,7 +252,7 @@ interface DB {
     currentUser: string | null; // username
 }
 
-const DB_KEY = 'HELLS_HUB_DB_V5'; // Bumped version
+const DB_KEY = 'HELLS_HUB_DB_V6'; // Bumped version
 
 // Helper to simulate network delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -279,14 +284,11 @@ class BackendService {
         const stored = localStorage.getItem(DB_KEY);
         if (stored) {
             this.db = JSON.parse(stored);
-            // Migrations for new features
-            if (!this.db.communities || this.db.communities.length === 0) {
-                this.db.communities = SEED_COMMUNITIES;
-            }
+            // Migrations
+            if (!this.db.communities || this.db.communities.length === 0) this.db.communities = SEED_COMMUNITIES;
             if (!this.db.episodes) this.db.episodes = SEED_EPISODES;
             if (!this.db.posts || this.db.posts.length === 0) this.db.posts = SEED_POSTS;
             
-            // Ensure users have new fields
             this.db.users.forEach(u => {
                 if (!u.joinedCommunities) u.joinedCommunities = ['all'];
                 if (!u.savedPostIds) u.savedPostIds = [];
@@ -296,6 +298,11 @@ class BackendService {
             // Migration: Ensure posts have awardedBy array
             this.db.posts.forEach(p => {
                 if (!p.awardedBy) p.awardedBy = [];
+            });
+            
+            // Migration: Ensure episodes have comments array distinct from reviews
+            this.db.episodes.forEach(e => {
+                if (!e.comments) e.comments = [];
             });
 
         } else {
@@ -425,7 +432,7 @@ class BackendService {
         }
     }
 
-    async rateEpisode(username: string, userAvatar: string, episodeId: string, rating: number, commentText: string): Promise<Review> {
+    async rateEpisode(username: string, userAvatar: string, episodeId: string, rating: number): Promise<Review> {
         await delay(400);
         const user = this.db.users.find(u => u.username === username);
         if (user) {
@@ -434,19 +441,47 @@ class BackendService {
 
         const episode = this.db.episodes.find(e => e.id === episodeId);
         if (!episode) throw new Error("Episode not found");
+        
+        // Check if user already has a review, update it
+        const existingReviewIndex = episode.reviews.findIndex(r => r.user === username);
+        if (existingReviewIndex !== -1) {
+            episode.reviews[existingReviewIndex].rating = rating;
+            // Update timestamp
+            episode.reviews[existingReviewIndex].timestamp = 'Updated just now';
+            this.save();
+            return episode.reviews[existingReviewIndex];
+        } else {
+            const newReview: Review = {
+                id: Date.now().toString(),
+                user: username,
+                userAvatar: userAvatar,
+                rating,
+                timestamp: 'Just now'
+            };
+            episode.reviews.unshift(newReview);
+            this.save();
+            return newReview;
+        }
+    }
 
-        const newReview: Review = {
+    async addEpisodeComment(username: string, userAvatar: string, episodeId: string, content: string): Promise<EpisodeComment> {
+        await delay(300);
+        const episode = this.db.episodes.find(e => e.id === episodeId);
+        if (!episode) throw new Error("Episode not found");
+        if (!episode.comments) episode.comments = [];
+
+        const newComment: EpisodeComment = {
             id: Date.now().toString(),
             user: username,
             userAvatar: userAvatar,
-            rating,
-            comment: commentText,
-            timestamp: 'Just now'
+            content: content,
+            timestamp: 'Just now',
+            likes: 0
         };
 
-        episode.reviews.unshift(newReview);
+        episode.comments.unshift(newComment);
         this.save();
-        return newReview;
+        return newComment;
     }
 
     // --- FORUM - COMMUNITIES ---
@@ -457,15 +492,12 @@ class BackendService {
 
     async createCommunity(community: Community): Promise<Community> {
         await delay(600);
-        // Duplicate check name
         if (this.db.communities.find(c => c.id === community.id || c.name.toLowerCase() === community.name.toLowerCase())) {
             throw new Error("Community already exists");
         }
-        // Set current user as creator
         community.creatorId = this.db.currentUser || undefined;
         this.db.communities.push(community);
         
-        // Auto-join the creator
         if (this.db.currentUser) {
             const user = this.db.users.find(u => u.username === this.db.currentUser);
             if (user) {
@@ -485,11 +517,11 @@ class BackendService {
         if (user.joinedCommunities.includes(communityId)) {
             user.joinedCommunities = user.joinedCommunities.filter(id => id !== communityId);
             this.save();
-            return false; // Joined = false
+            return false;
         } else {
             user.joinedCommunities.push(communityId);
             this.save();
-            return true; // Joined = true
+            return true;
         }
     }
 
@@ -504,7 +536,7 @@ class BackendService {
             timestamp: formatTime(p.timestamp),
             userVote: 0,
             isSaved: user?.savedPostIds.includes(p.id) || false,
-            awardedBy: p.awardedBy || [] // Ensure array existence
+            awardedBy: p.awardedBy || [] 
         }));
     }
 
@@ -556,22 +588,20 @@ class BackendService {
 
         const post = this.db.posts.find(p => p.id === postId);
         if (post) {
-            // Initialize array if missing (migration)
             if (!post.awardedBy) post.awardedBy = [];
 
-            // Check if already awarded
+            // SINGLE AWARD CHECK
             if (post.awardedBy.includes(currentUser)) {
-                return; // Do nothing if already awarded
+                return; // User already gave award, deny transaction
             }
 
-            // Award logic
             post.awards = (post.awards || 0) + 1;
             post.awardedBy.push(currentUser);
             
-            // Notify author
             const author = this.db.users.find(u => u.username === post.author);
             if (author) {
-                author.notifications?.unshift({
+                if(!author.notifications) author.notifications = [];
+                author.notifications.unshift({
                     id: Date.now().toString(),
                     type: 'award',
                     message: `User ${currentUser} gave your post a Soul!`,
@@ -593,7 +623,6 @@ class BackendService {
         post.comments.push(comment);
         post.replies = post.comments.length;
         
-        // Mock Notification for Post Author (if not self)
         if (post.author !== this.db.currentUser) {
             const author = this.db.users.find(u => u.username === post.author);
             if (author) {

@@ -82,13 +82,23 @@ export interface Comment {
   children?: Comment[]; // For UI rendering of threads
 }
 
+// Used for Episode Reviews (Rating only or Rating+Comment legacy)
 export interface Review {
   id: string;
   user: string;
   userAvatar?: string;
   rating: number; // 1-10
-  comment: string;
+  comment?: string; // Optional now
   timestamp: string;
+}
+
+export interface EpisodeComment {
+    id: string;
+    user: string;
+    userAvatar: string;
+    content: string;
+    timestamp: string;
+    likes: number;
 }
 
 export interface Episode {
@@ -100,7 +110,8 @@ export interface Episode {
   thumbnail: string;
   videoUrl: string; // Embed URL
   synopsis: string;
-  reviews: Review[];
+  reviews: Review[]; // Only strictly ratings/reviews
+  comments?: EpisodeComment[]; // Separate comment stream
 }
 
 export interface Notification {
