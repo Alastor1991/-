@@ -67,6 +67,7 @@ export interface ForumPost {
   userVote?: number; // 0, 1, or -1 (Local state helper)
   isSaved?: boolean; // Local helper
   awards?: number; // Count of "Soul" awards
+  awardedBy?: string[]; // List of usernames who awarded this post
 }
 
 export interface Comment {

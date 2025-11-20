@@ -147,7 +147,9 @@ const SEED_POSTS: ForumPost[] = [
         { id: 'c1', parentId: null, author: 'AngelDust', avatar: 'https://upload.wikimedia.org/wikipedia/en/2/24/Angel_Dust_Hazbin_Hotel.png', content: 'О боже, какая драма! 🍿 Продолжай, я записываю.', likes: 69, timestamp: '5m ago' },
         { id: 'c2', parentId: 'c1', author: 'RadioDemon', avatar: 'https://upload.wikimedia.org/wikipedia/en/e/e2/Alastor_Hazbin_Hotel.png', content: 'Убери свои лапы от клавиатуры, женоподобный паук.', likes: 120, timestamp: '3m ago' },
         { id: 'c3', parentId: null, author: 'Vox', avatar: 'https://static.wikia.nocookie.net/hazbinhotel/images/c/c2/Vox_App.png', content: 'Твое время ушло, старик. Будущее за экранами.', likes: -50, timestamp: '1m ago' }
-    ]
+    ],
+    awards: 0,
+    awardedBy: []
   },
   {
     id: 'p2',
@@ -165,7 +167,9 @@ const SEED_POSTS: ForumPost[] = [
     image: 'https://i.pinimg.com/736x/d3/5a/52/d35a522147759987c661f4339600988c.jpg',
     tags: ['Fashion', 'Rant', 'Vees'],
     timestamp: '2024-05-20T14:00:00Z',
-    comments: []
+    comments: [],
+    awards: 0,
+    awardedBy: []
   },
   {
     id: 'p3',
@@ -182,7 +186,9 @@ const SEED_POSTS: ForumPost[] = [
     replies: 0,
     tags: ['Business', 'Murder', 'Horses'],
     timestamp: '2024-05-21T09:00:00Z',
-    comments: []
+    comments: [],
+    awards: 0,
+    awardedBy: []
   },
   {
     id: 'p4',
@@ -199,7 +205,9 @@ const SEED_POSTS: ForumPost[] = [
     replies: 0,
     tags: ['Tech', 'Update', 'TrustUs'],
     timestamp: '2024-05-21T10:30:00Z',
-    comments: []
+    comments: [],
+    awards: 0,
+    awardedBy: []
   },
   {
     id: 'p5',
@@ -223,7 +231,9 @@ const SEED_POSTS: ForumPost[] = [
         { id: 'po4', text: 'Cherri Bomb', votes: 300 }
     ],
     pollTotalVotes: 1450,
-    comments: []
+    comments: [],
+    awards: 0,
+    awardedBy: []
   }
 ];
 
@@ -281,6 +291,11 @@ class BackendService {
                 if (!u.joinedCommunities) u.joinedCommunities = ['all'];
                 if (!u.savedPostIds) u.savedPostIds = [];
                 if (!u.notifications) u.notifications = [];
+            });
+            
+            // Migration: Ensure posts have awardedBy array
+            this.db.posts.forEach(p => {
+                if (!p.awardedBy) p.awardedBy = [];
             });
 
         } else {
@@ -488,13 +503,14 @@ class BackendService {
             ...p,
             timestamp: formatTime(p.timestamp),
             userVote: 0,
-            isSaved: user?.savedPostIds.includes(p.id) || false
+            isSaved: user?.savedPostIds.includes(p.id) || false,
+            awardedBy: p.awardedBy || [] // Ensure array existence
         }));
     }
 
     async createPost(post: ForumPost): Promise<ForumPost> {
         await delay(500);
-        const newPost = { ...post, timestamp: new Date().toISOString() };
+        const newPost = { ...post, timestamp: new Date().toISOString(), awards: 0, awardedBy: [] };
         this.db.posts.unshift(newPost);
         this.save();
         return { ...newPost, timestamp: 'Just now' };
@@ -535,9 +551,22 @@ class BackendService {
 
     async giveAward(postId: string): Promise<void> {
         await delay(100);
+        const currentUser = this.db.currentUser;
+        if (!currentUser) return;
+
         const post = this.db.posts.find(p => p.id === postId);
         if (post) {
+            // Initialize array if missing (migration)
+            if (!post.awardedBy) post.awardedBy = [];
+
+            // Check if already awarded
+            if (post.awardedBy.includes(currentUser)) {
+                return; // Do nothing if already awarded
+            }
+
+            // Award logic
             post.awards = (post.awards || 0) + 1;
+            post.awardedBy.push(currentUser);
             
             // Notify author
             const author = this.db.users.find(u => u.username === post.author);
@@ -545,7 +574,7 @@ class BackendService {
                 author.notifications?.unshift({
                     id: Date.now().toString(),
                     type: 'award',
-                    message: `User ${this.db.currentUser} gave your post a Soul!`,
+                    message: `User ${currentUser} gave your post a Soul!`,
                     read: false,
                     timestamp: new Date().toISOString(),
                     linkId: postId

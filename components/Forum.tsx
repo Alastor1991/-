@@ -360,7 +360,9 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
       tags: [postType.toUpperCase()],
       timestamp: 'Just now',
       comments: [],
-      userVote: 0
+      userVote: 0,
+      awards: 0,
+      awardedBy: []
     };
 
     try {
@@ -439,9 +441,22 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
   };
   
   const handleGiveAward = async (postId: string) => {
+      const currentPost = posts.find(p => p.id === postId);
+      if (currentPost && currentPost.awardedBy?.includes(user.username)) {
+          // Already awarded, do nothing
+          return;
+      }
+
+      // Optimistic update
+      const updatedAwards = (currentPost?.awards || 0) + 1;
+      const updatedAwardedBy = [...(currentPost?.awardedBy || []), user.username];
+      
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, awards: updatedAwards, awardedBy: updatedAwardedBy } : p));
+      if (selectedPost?.id === postId) {
+          setSelectedPost(prev => prev ? { ...prev, awards: updatedAwards, awardedBy: updatedAwardedBy } : null);
+      }
+
       await backend.giveAward(postId);
-      setPosts(prev => prev.map(p => p.id === postId ? { ...p, awards: (p.awards || 0) + 1 } : p));
-      if (selectedPost?.id === postId) setSelectedPost({ ...selectedPost, awards: (selectedPost.awards || 0) + 1 });
   };
 
   const handlePollVote = async (postId: string, optionId: string) => {
@@ -705,7 +720,7 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                                    {selectedPost.isNsfw && <span className="border border-red-500 text-red-500 px-2 py-0.5 text-[10px] font-bold uppercase rounded">SINFUL (NSFW)</span>}
                                    {selectedPost.isSpoiler && <span className="border border-yellow-500 text-yellow-500 px-2 py-0.5 text-[10px] font-bold uppercase rounded">HAZARD (SPOILER)</span>}
                                    {(selectedPost.awards || 0) > 0 && (
-                                       <span className="bg-gradient-to-r from-yellow-600 to-yellow-400 text-black px-2 py-0.5 text-[10px] font-bold uppercase rounded flex items-center gap-1">
+                                       <span className="bg-gradient-to-r from-yellow-600 to-yellow-400 text-black px-2 py-0.5 text-[10px] font-bold uppercase rounded flex items-center gap-1 shadow-[0_0_10px_rgba(255,215,0,0.3)]">
                                            👻 {selectedPost.awards} Souls Harvested
                                        </span>
                                    )}
@@ -759,10 +774,24 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                                        <svg className="w-4 h-4" fill={selectedPost.isSaved ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
                                        {selectedPost.isSaved ? 'Signal Saved' : 'Save Signal'}
                                    </button>
-                                   <button onClick={() => handleGiveAward(selectedPost.id)} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-yellow-400 transition-colors">
-                                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                       Offer Soul
-                                   </button>
+                                   
+                                   {(() => {
+                                       const hasAwarded = selectedPost.awardedBy?.includes(user.username);
+                                       return (
+                                            <button 
+                                                onClick={() => handleGiveAward(selectedPost.id)} 
+                                                disabled={hasAwarded}
+                                                className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest transition-colors ${
+                                                    hasAwarded 
+                                                        ? 'text-yellow-500 cursor-default opacity-100 drop-shadow-[0_0_5px_rgba(255,215,0,0.5)]' 
+                                                        : 'text-gray-500 hover:text-yellow-400'
+                                                }`}
+                                            >
+                                                <svg className="w-4 h-4" fill={hasAwarded ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                {hasAwarded ? 'Soul Offered' : 'Offer Soul'}
+                                            </button>
+                                       );
+                                   })()}
                                </div>
 
                                {/* Comment Section */}
@@ -942,7 +971,7 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                                            </div>
                                            
                                            {(post.awards || 0) > 0 && (
-                                               <span className="text-yellow-500 text-xs font-bold flex items-center gap-1">
+                                               <span className="text-yellow-500 text-xs font-bold flex items-center gap-1 shadow-[0_0_10px_rgba(255,215,0,0.2)]">
                                                    👻 {post.awards}
                                                </span>
                                            )}
