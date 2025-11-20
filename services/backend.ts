@@ -359,9 +359,9 @@ class BackendService {
 
     async createCommunity(community: Community): Promise<Community> {
         await delay(600);
-        // Ensure no duplicates ID
-        if (this.db.communities.find(c => c.id === community.id)) {
-            throw new Error("Community ID already exists");
+        // Ensure no duplicates ID or case-insensitive Name
+        if (this.db.communities.find(c => c.id === community.id || c.name.toLowerCase() === community.name.toLowerCase())) {
+            throw new Error("Community already exists");
         }
         this.db.communities.push(community);
         this.save();

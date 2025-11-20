@@ -5,6 +5,34 @@ import { backend } from '../services/backend';
 
 // --- SUBCOMPONENTS ---
 
+const CommunityIcon: React.FC<{ icon: string; size?: 'sm' | 'md' | 'lg' | 'xl' }> = ({ icon, size = 'md' }) => {
+    const isUrl = icon.startsWith('http') || icon.startsWith('data:');
+    
+    let sizeClasses = "w-8 h-8 text-xl";
+    if (size === 'sm') sizeClasses = "w-4 h-4 text-xs";
+    if (size === 'lg') sizeClasses = "w-16 h-16 text-4xl";
+    if (size === 'xl') sizeClasses = "w-20 h-20 text-6xl";
+
+    if (isUrl) {
+        return (
+            <div className={`${sizeClasses} rounded-full overflow-hidden border border-white/10 flex-shrink-0 bg-black`}>
+                <img 
+                    src={icon} 
+                    alt="icon" 
+                    className="w-full h-full object-cover" 
+                    onError={(e) => {
+                        // Fallback if image fails
+                        (e.target as HTMLElement).style.display = 'none';
+                        (e.target as HTMLElement).parentElement!.innerText = '📡';
+                    }}
+                />
+            </div>
+        );
+    }
+
+    return <span className={`flex items-center justify-center ${sizeClasses}`}>{icon}</span>;
+};
+
 const VoteControl: React.FC<{ 
     likes: number; 
     userVote?: number; 
@@ -186,6 +214,7 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreateCommunityModalOpen, setIsCreateCommunityModalOpen] = useState(false);
+  const [creatingCommunity, setCreatingCommunity] = useState(false);
 
   const [loading, setLoading] = useState(true);
   
@@ -297,6 +326,9 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
 
   const handleCreateCommunity = async () => {
       if (!newCommName.trim() || !newCommDesc.trim()) return;
+      if (creatingCommunity) return; // Prevent double submission
+
+      setCreatingCommunity(true);
       
       // Ensure name starts with 'r/' for consistency if user forgets
       let finalName = newCommName.trim();
@@ -314,14 +346,21 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
 
       try {
           const created = await backend.createCommunity(newCommunity);
-          setCommunities([...communities, created]);
+          // Only add if it doesn't already exist in local state (Double safety)
+          setCommunities(prev => {
+              if (prev.some(c => c.id === created.id)) return prev;
+              return [...prev, created];
+          });
           setIsCreateCommunityModalOpen(false);
           setNewCommName('');
           setNewCommDesc('');
+          setNewCommIcon('📢');
           setSelectedCommunityId(created.id); // Switch to new community
       } catch (e) {
           console.error("Failed to create community", e);
           alert("Failed to create channel. It might already exist.");
+      } finally {
+          setCreatingCommunity(false);
       }
   };
 
@@ -459,7 +498,9 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                             onClick={() => { setSelectedCommunityId(c.id); setSelectedPost(null); window.scrollTo({top:0}); }}
                             className={`w-full flex items-center gap-3 px-4 py-3 rounded-r-xl border-l-4 transition-all duration-200 group ${selectedCommunityId === c.id ? 'bg-gradient-to-r from-neon-blue/20 to-transparent border-neon-blue text-white' : 'border-transparent hover:bg-white/5 text-gray-400 hover:text-white hover:border-gray-500'}`}
                         >
-                            <span className={`text-xl group-hover:scale-110 transition-transform duration-300 filter drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]`}>{c.icon}</span>
+                            <span className={`group-hover:scale-110 transition-transform duration-300 filter drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]`}>
+                                <CommunityIcon icon={c.icon} size="md"/>
+                            </span>
                             <span className={`text-sm font-bold font-tech tracking-wide truncate ${selectedCommunityId === c.id ? 'text-neon-blue' : ''}`}>{c.name}</span>
                         </button>
                     ))}
@@ -600,7 +641,9 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                                <div className="absolute right-0 top-0 h-full w-1/2 bg-gradient-to-l from-neon-blue/10 to-transparent transform skew-x-12"></div>
                                
                                <div className="relative z-10 flex items-center gap-6">
-                                   <div className="text-6xl filter drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">{currentCommunity.icon}</div>
+                                   <div className="filter drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
+                                       <CommunityIcon icon={currentCommunity.icon} size="xl"/>
+                                   </div>
                                    <div>
                                        <h2 className="text-3xl font-tech font-bold text-white mb-1 tracking-wide">{currentCommunity.name}</h2>
                                        <p className="text-neon-blue/70 text-sm font-mono">{currentCommunity.description}</p>
@@ -642,7 +685,7 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
 
                                    <div className="relative z-10">
                                        <div className="flex items-center gap-2 text-[10px] text-gray-500 mb-3 font-mono">
-                                           {communities.find(c => c.id === post.communityId)?.icon}
+                                           <CommunityIcon icon={communities.find(c => c.id === post.communityId)?.icon || '📡'} size="sm"/>
                                            <span className="text-gray-300 font-bold">{communities.find(c => c.id === post.communityId)?.name}</span>
                                            <span className="text-gray-700">|</span>
                                            <span className="text-neon-blue/80">u/{post.author}</span>
@@ -709,14 +752,14 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                       <div className="grid grid-cols-2 gap-3 text-center">
                           <div className="flex flex-col p-3 bg-black border border-gray-800 rounded hover:border-neon-blue/30 transition-colors">
                               <span className="text-lg font-bold text-white font-mono">666k</span>
-                              <span className="text-[9px] text-neon-blue/50 uppercase tracking-widest">Sinners</span>
+                              <span className="text-xs text-neon-blue/50 uppercase tracking-widest">Sinners</span>
                           </div>
                           <div className="flex flex-col p-3 bg-black border border-gray-800 rounded hover:border-neon-green/30 transition-colors">
                               <span className="text-lg font-bold text-neon-green flex items-center justify-center gap-2">
                                   <span className="w-1.5 h-1.5 bg-neon-green rounded-full animate-pulse"></span>
                                   1.5k
                               </span>
-                              <span className="text-[9px] text-neon-green/50 uppercase tracking-widest">Online</span>
+                              <span className="text-xs text-neon-green/50 uppercase tracking-widest">Online</span>
                           </div>
                       </div>
 
@@ -849,11 +892,10 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                       </div>
                       
                       <div className="mb-4">
-                           <label className="text-[10px] uppercase text-neon-green/70 font-bold tracking-widest mb-1 block">Node Icon (Emoji)</label>
+                           <label className="text-[10px] uppercase text-neon-green/70 font-bold tracking-widest mb-1 block">Node Icon (Emoji OR Image URL)</label>
                            <input 
-                               className="w-16 bg-black/50 border border-gray-700 rounded p-3 text-center text-2xl text-white focus:border-neon-green focus:outline-none transition-colors"
-                               placeholder="📡"
-                               maxLength={2}
+                               className="w-full bg-black/50 border border-gray-700 rounded p-3 text-white focus:border-neon-green focus:outline-none transition-colors"
+                               placeholder="📡 or https://image.png"
                                value={newCommIcon}
                                onChange={e => setNewCommIcon(e.target.value)}
                            />
@@ -879,10 +921,10 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                       </button>
                       <button 
                           onClick={handleCreateCommunity}
-                          className={`px-8 py-2 rounded bg-neon-green text-black font-bold hover:bg-white hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] transition-all uppercase text-xs tracking-[0.2em] ${(!newCommName.trim() || !newCommDesc.trim()) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          disabled={!newCommName.trim() || !newCommDesc.trim()}
+                          className={`px-8 py-2 rounded bg-neon-green text-black font-bold transition-all uppercase text-xs tracking-[0.2em] ${(!newCommName.trim() || !newCommDesc.trim() || creatingCommunity) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white hover:shadow-[0_0_15px_rgba(255,255,255,0.5)]'}`}
+                          disabled={!newCommName.trim() || !newCommDesc.trim() || creatingCommunity}
                       >
-                          Initialize
+                          {creatingCommunity ? 'INITIALIZING...' : 'INITIALIZE'}
                       </button>
                   </div>
               </div>

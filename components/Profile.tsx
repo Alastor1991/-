@@ -86,13 +86,25 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onLogout, onClose
                                 </div>
                                 
                                 {!readOnly && (
-                                    <div className="absolute -bottom-3 -right-3 bg-black border border-white/20 p-2 rounded-full">
+                                    <div className="absolute -bottom-3 -right-3 bg-black border border-white/20 p-2 rounded-full z-20">
                                         <button onClick={() => setIsEditing(!isEditing)} className="text-white hover:text-neon-blue">
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                                         </button>
                                     </div>
                                 )}
                             </div>
+                            
+                            {isEditing && (
+                                <div className="w-full mb-6 animate-fade-in">
+                                    <label className="text-[10px] uppercase text-gray-500 font-bold tracking-widest mb-1 block">Avatar Image URL</label>
+                                    <input
+                                        value={editAvatar}
+                                        onChange={(e) => setEditAvatar(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-xs text-white font-mono focus:border-neon-blue outline-none transition-colors placeholder-gray-600"
+                                        placeholder="https://..."
+                                    />
+                                </div>
+                            )}
 
                             {/* Stats Grid */}
                             <div className="w-full grid grid-cols-2 gap-3">
