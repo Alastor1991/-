@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ForumPost, Comment, UserProfile, Community } from '../types';
+import { ForumPost, Comment, UserProfile, Community, PostType, PollOption } from '../types';
 import { backend } from '../services/backend';
 
 // --- SUBCOMPONENTS ---
@@ -71,17 +71,24 @@ const VoteControl: React.FC<{
 };
 
 // Utility to build a nested tree from flat comments
-const buildCommentTree = (comments: Comment[]) => {
+const buildCommentTree = (comments: Comment[], sort: 'new'|'old'|'best' = 'best') => {
     const map: Record<string, Comment> = {};
     const roots: Comment[] = [];
     
+    // Deep copy to avoid mutating props
+    const sortedComments = [...comments];
+    
+    // Sort logic
+    if (sort === 'new') sortedComments.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()); // This won't work perfectly with the fuzzy timestamps, but good for now
+    if (sort === 'best') sortedComments.sort((a,b) => b.likes - a.likes);
+
     // Initialize map with children arrays
-    comments.forEach(c => {
+    sortedComments.forEach(c => {
         map[c.id] = { ...c, children: [] };
     });
 
     // Link children to parents
-    comments.forEach(c => {
+    sortedComments.forEach(c => {
         if (c.parentId && map[c.parentId]) {
             map[c.parentId].children!.push(map[c.id]);
         } else {
@@ -211,6 +218,7 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [selectedCommunityId, setSelectedCommunityId] = useState<string>('all');
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
+  const [joinedCommunities, setJoinedCommunities] = useState<string[]>(user.joinedCommunities || []);
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreateCommunityModalOpen, setIsCreateCommunityModalOpen] = useState(false);
@@ -221,12 +229,17 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
   // Filter & Sort State
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSort, setActiveSort] = useState<'new' | 'hot' | 'top'>('new');
+  const [commentSort, setCommentSort] = useState<'new' | 'old' | 'best'>('best');
 
   // New Post State
+  const [postType, setPostType] = useState<PostType>('text');
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
-  const [newImage, setNewImage] = useState('');
+  const [newLink, setNewLink] = useState('');
   const [postCommunityId, setPostCommunityId] = useState('');
+  const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
+  const [isNsfw, setIsNsfw] = useState(false);
+  const [isSpoiler, setIsSpoiler] = useState(false);
 
   // New Community State
   const [newCommName, setNewCommName] = useState('');
@@ -238,14 +251,18 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
   const [replyTo, setReplyTo] = useState<{ id: string; author: string } | null>(null);
   const [submittingComment, setSubmittingComment] = useState(false);
 
+  // Local Spoiler reveals
+  const [revealedSpoilers, setRevealedSpoilers] = useState<string[]>([]);
+
   // Initial Fetch
   useEffect(() => {
       const init = async () => {
           try {
-              const [p, c] = await Promise.all([backend.getPosts(), backend.getCommunities()]);
+              const [p, c, u] = await Promise.all([backend.getPosts(), backend.getCommunities(), backend.getCurrentUser()]);
               setPosts(p);
               setCommunities(c);
-              if (c.length > 0) setPostCommunityId(c[1].id); // Default to first real community (skip 'all')
+              if (u) setJoinedCommunities(u.joinedCommunities);
+              if (c.length > 0) setPostCommunityId(c[1].id); 
           } catch (e) {
               console.error(e);
           } finally {
@@ -262,7 +279,12 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
       let result = [...posts];
 
       // Filter by Community
-      if (selectedCommunityId !== 'all') {
+      if (selectedCommunityId === 'all') {
+          // Only show joined communities unless user joined nothing, then show generic seed
+          if (joinedCommunities.length > 0 && !joinedCommunities.includes('all')) {
+              result = result.filter(p => joinedCommunities.includes(p.communityId));
+          }
+      } else {
           result = result.filter(p => p.communityId === selectedCommunityId);
       }
 
@@ -277,23 +299,48 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
       }
 
       // Sort
+      const getScore = (p: ForumPost) => p.likes + (p.isPinned ? 10000 : 0);
+      
       switch (activeSort) {
           case 'top': result.sort((a, b) => b.likes - a.likes); break;
           case 'hot': result.sort((a, b) => (b.likes + b.replies * 2) - (a.likes + a.replies * 2)); break;
-          default: break; // 'new' is typically insertion order in this mock
+          default: // New
+              result.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+              break;
       }
 
+      // Always float pinned to top within sort
+      result.sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
+
       return result;
-  }, [posts, selectedCommunityId, searchQuery, activeSort]);
+  }, [posts, selectedCommunityId, searchQuery, activeSort, joinedCommunities]);
 
   const commentTree = useMemo(() => {
       if (!selectedPost || !selectedPost.comments) return [];
-      return buildCommentTree(selectedPost.comments);
-  }, [selectedPost]);
+      return buildCommentTree(selectedPost.comments, commentSort);
+  }, [selectedPost, commentSort]);
+
+  const handleJoinToggle = async (commId: string) => {
+      if (commId === 'all') return;
+      const joined = await backend.toggleJoinCommunity(commId);
+      setJoinedCommunities(prev => joined ? [...prev, commId] : prev.filter(id => id !== commId));
+  };
 
   const handleCreatePost = async () => {
     if (!newTitle.trim() || !postCommunityId) return;
     
+    let finalImage = undefined;
+    let finalPollOptions: PollOption[] | undefined = undefined;
+
+    if (postType === 'image') finalImage = newLink;
+    if (postType === 'poll') {
+        finalPollOptions = pollOptions.filter(o => o.trim()).map((text, idx) => ({
+            id: `opt-${idx}-${Date.now()}`,
+            text,
+            votes: 0
+        }));
+    }
+
     const newPost: ForumPost = {
       id: Date.now().toString(),
       communityId: postCommunityId,
@@ -301,10 +348,16 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
       avatar: user.avatar,
       title: newTitle,
       content: newContent,
-      image: newImage || undefined,
+      type: postType,
+      image: finalImage,
+      linkUrl: postType === 'link' ? newLink : undefined,
+      pollOptions: finalPollOptions,
+      isNsfw,
+      isSpoiler,
+      isPinned: false,
       likes: 0,
       replies: 0,
-      tags: ['New'],
+      tags: [postType.toUpperCase()],
       timestamp: 'Just now',
       comments: [],
       userVote: 0
@@ -314,8 +367,10 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
         const savedPost = await backend.createPost(newPost);
         setPosts([savedPost, ...posts]);
         setIsCreateModalOpen(false);
-        setNewTitle(''); setNewContent(''); setNewImage('');
-        // If we posted to a community we aren't viewing, switch to it or 'all'
+        // Reset form
+        setNewTitle(''); setNewContent(''); setNewLink(''); setPollOptions(['','']);
+        setPostType('text'); setIsNsfw(false); setIsSpoiler(false);
+        
         if (selectedCommunityId !== 'all' && selectedCommunityId !== postCommunityId) {
             setSelectedCommunityId(postCommunityId);
         }
@@ -326,11 +381,10 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
 
   const handleCreateCommunity = async () => {
       if (!newCommName.trim() || !newCommDesc.trim()) return;
-      if (creatingCommunity) return; // Prevent double submission
+      if (creatingCommunity) return; 
 
       setCreatingCommunity(true);
       
-      // Ensure name starts with 'r/' for consistency if user forgets
       let finalName = newCommName.trim();
       if (!finalName.startsWith('r/')) finalName = 'r/' + finalName;
 
@@ -341,26 +395,62 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
           name: finalName,
           description: newCommDesc,
           icon: newCommIcon || '📡',
-          color: 'text-neon-green' // Default user communities to green to distinguish
+          color: 'text-neon-green'
       };
 
       try {
           const created = await backend.createCommunity(newCommunity);
-          // Only add if it doesn't already exist in local state (Double safety)
           setCommunities(prev => {
               if (prev.some(c => c.id === created.id)) return prev;
               return [...prev, created];
           });
+          setJoinedCommunities(prev => [...prev, created.id]);
           setIsCreateCommunityModalOpen(false);
           setNewCommName('');
           setNewCommDesc('');
           setNewCommIcon('📢');
-          setSelectedCommunityId(created.id); // Switch to new community
+          setSelectedCommunityId(created.id); 
       } catch (e) {
           console.error("Failed to create community", e);
           alert("Failed to create channel. It might already exist.");
       } finally {
           setCreatingCommunity(false);
+      }
+  };
+
+  // Actions
+  const handlePostDelete = async (postId: string) => {
+      if (!window.confirm("Sever this connection? This cannot be undone.")) return;
+      await backend.deletePost(postId);
+      setPosts(prev => prev.filter(p => p.id !== postId));
+      if (selectedPost?.id === postId) setSelectedPost(null);
+  };
+
+  const handlePostPin = async (postId: string) => {
+      const newVal = await backend.togglePinPost(postId);
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, isPinned: newVal } : p));
+      if (selectedPost?.id === postId) setSelectedPost({ ...selectedPost, isPinned: newVal });
+  };
+
+  const handlePostSave = async (postId: string) => {
+      const isSaved = await backend.toggleSavePost(postId);
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, isSaved } : p));
+      if (selectedPost?.id === postId) setSelectedPost({ ...selectedPost, isSaved });
+  };
+  
+  const handleGiveAward = async (postId: string) => {
+      await backend.giveAward(postId);
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, awards: (p.awards || 0) + 1 } : p));
+      if (selectedPost?.id === postId) setSelectedPost({ ...selectedPost, awards: (selectedPost.awards || 0) + 1 });
+  };
+
+  const handlePollVote = async (postId: string, optionId: string) => {
+      const updatedPostRaw = await backend.votePoll(postId, optionId);
+      if (updatedPostRaw) {
+          // Re-map raw post to UI post format (timestamp)
+          const updatedPost = { ...updatedPostRaw, userVote: 0 }; 
+          setPosts(prev => prev.map(p => p.id === postId ? updatedPost : p));
+          if (selectedPost?.id === postId) setSelectedPost(updatedPost);
       }
   };
 
@@ -432,8 +522,14 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
 
   const openPost = (post: ForumPost) => {
       setSelectedPost(post);
-      // Important: Scroll to top when opening a post to fix the "cut off" bug
       window.scrollTo({top: 0, behavior: 'smooth'});
+  };
+
+  // --- RENDER HELPERS ---
+
+  const isMod = (commId: string) => {
+      const c = communities.find(x => x.id === commId);
+      return c?.creatorId === user.username; 
   };
 
   if (loading) return <div className="text-center py-20 text-neon-blue font-mono animate-pulse tracking-widest">ESTABLISHING SECURE LINK...</div>;
@@ -492,18 +588,29 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                   </div>
                   
                   <div className="max-h-[60vh] overflow-y-auto custom-scrollbar space-y-1">
-                    {communities.map(c => (
-                        <button
-                            key={c.id}
-                            onClick={() => { setSelectedCommunityId(c.id); setSelectedPost(null); window.scrollTo({top:0}); }}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-r-xl border-l-4 transition-all duration-200 group ${selectedCommunityId === c.id ? 'bg-gradient-to-r from-neon-blue/20 to-transparent border-neon-blue text-white' : 'border-transparent hover:bg-white/5 text-gray-400 hover:text-white hover:border-gray-500'}`}
-                        >
-                            <span className={`group-hover:scale-110 transition-transform duration-300 filter drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]`}>
-                                <CommunityIcon icon={c.icon} size="md"/>
-                            </span>
-                            <span className={`text-sm font-bold font-tech tracking-wide truncate ${selectedCommunityId === c.id ? 'text-neon-blue' : ''}`}>{c.name}</span>
-                        </button>
-                    ))}
+                    {communities.map(c => {
+                        const isJoined = joinedCommunities.includes(c.id);
+                        return (
+                        <div key={c.id} className="group relative flex items-center">
+                            <button
+                                onClick={() => { setSelectedCommunityId(c.id); setSelectedPost(null); window.scrollTo({top:0}); }}
+                                className={`flex-1 flex items-center gap-3 px-4 py-3 rounded-r-xl border-l-4 transition-all duration-200 ${selectedCommunityId === c.id ? 'bg-gradient-to-r from-neon-blue/20 to-transparent border-neon-blue text-white' : 'border-transparent hover:bg-white/5 text-gray-400 hover:text-white hover:border-gray-500'}`}
+                            >
+                                <span className={`transition-transform duration-300 group-hover:scale-110`}>
+                                    <CommunityIcon icon={c.icon} size="md"/>
+                                </span>
+                                <span className={`text-sm font-bold font-tech tracking-wide truncate ${selectedCommunityId === c.id ? 'text-neon-blue' : ''}`}>{c.name}</span>
+                            </button>
+                            {c.id !== 'all' && (
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); handleJoinToggle(c.id); }}
+                                    className={`absolute right-2 text-xs font-bold px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-all ${isJoined ? 'bg-gray-800 text-red-500' : 'bg-neon-blue text-black'}`}
+                                >
+                                    {isJoined ? '-' : '+'}
+                                </button>
+                            )}
+                        </div>
+                    )})}
                   </div>
                   
                   <div className="my-6 pt-4 px-2 border-t border-white/5">
@@ -525,19 +632,41 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
               
               {selectedPost ? (
                   // === POST DETAIL VIEW ===
-                  // Added styling to make it distinct and fix scroll issues
                   <div className="glass-panel rounded-xl border border-neon-blue/20 overflow-hidden animate-fade-in shadow-[0_0_50px_rgba(0,0,0,0.5)] mx-2 md:mx-0">
                       
-                      {/* Post Header (Sticky with high Z-Index) */}
-                      <div className="bg-vox-dark/95 p-3 flex items-center gap-2 border-b border-neon-blue/20 sticky top-0 z-50 backdrop-blur-md">
-                          <button onClick={() => setSelectedPost(null)} className="hover:bg-neon-blue/20 p-2 rounded-full text-neon-blue transition-colors">
-                              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                          </button>
-                          <span className="font-bold font-tech text-neon-blue tracking-wider uppercase">Signal Source #{selectedPost.id.slice(-4)}</span>
+                      {/* Post Header */}
+                      <div className="bg-vox-dark/95 p-3 flex items-center justify-between border-b border-neon-blue/20 sticky top-0 z-50 backdrop-blur-md">
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => setSelectedPost(null)} className="hover:bg-neon-blue/20 p-2 rounded-full text-neon-blue transition-colors">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                            </button>
+                            <span className="font-bold font-tech text-neon-blue tracking-wider uppercase">Signal Source #{selectedPost.id.slice(-4)}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                              {/* Mod/Author Actions */}
+                              {(user.username === selectedPost.author || isMod(selectedPost.communityId)) && (
+                                  <button 
+                                    onClick={() => handlePostDelete(selectedPost.id)} 
+                                    className="text-gray-500 hover:text-red-500 p-2" title="Exterminate Signal"
+                                  >
+                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                  </button>
+                              )}
+                              {isMod(selectedPost.communityId) && (
+                                  <button 
+                                    onClick={() => handlePostPin(selectedPost.id)}
+                                    className={`p-2 ${selectedPost.isPinned ? 'text-neon-green' : 'text-gray-500 hover:text-neon-green'}`} 
+                                    title="Impale (Pin)"
+                                  >
+                                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/></svg>
+                                  </button>
+                              )}
+                          </div>
                       </div>
 
                       <div className="flex flex-col md:flex-row">
-                           {/* Desktop Vote - Left Sidebar */}
+                           {/* Desktop Vote */}
                            <div className="hidden md:flex w-16 bg-black/30 border-r border-white/5 pt-6 justify-center">
                                <VoteControl 
                                   likes={selectedPost.likes} 
@@ -570,21 +699,88 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                                    </span>
                                    <span className="ml-auto text-neon-blue/70">{selectedPost.timestamp}</span>
                                </div>
+                               
+                               {/* Awards & Flags */}
+                               <div className="flex flex-wrap gap-2 mb-4">
+                                   {selectedPost.isNsfw && <span className="border border-red-500 text-red-500 px-2 py-0.5 text-[10px] font-bold uppercase rounded">SINFUL (NSFW)</span>}
+                                   {selectedPost.isSpoiler && <span className="border border-yellow-500 text-yellow-500 px-2 py-0.5 text-[10px] font-bold uppercase rounded">HAZARD (SPOILER)</span>}
+                                   {(selectedPost.awards || 0) > 0 && (
+                                       <span className="bg-gradient-to-r from-yellow-600 to-yellow-400 text-black px-2 py-0.5 text-[10px] font-bold uppercase rounded flex items-center gap-1">
+                                           👻 {selectedPost.awards} Souls Harvested
+                                       </span>
+                                   )}
+                               </div>
 
                                <h1 className="text-2xl md:text-4xl font-bold text-white mb-6 leading-tight text-glow-blue/30">{selectedPost.title}</h1>
                                
-                               {selectedPost.image && (
-                                   <div className="mb-8 rounded-lg border-2 border-neon-blue/20 bg-black flex justify-center overflow-hidden shadow-[0_0_30px_rgba(0,247,255,0.05)]">
-                                       <img src={selectedPost.image} className="max-h-[600px] w-auto object-contain" alt="Post"/>
-                                   </div>
-                               )}
+                               {/* POST CONTENT RENDERING */}
+                               <div className={`mb-8 ${selectedPost.isSpoiler && !revealedSpoilers.includes(selectedPost.id) ? 'filter blur-lg cursor-pointer opacity-50 hover:opacity-80 transition-all' : ''}`}
+                                    onClick={() => selectedPost.isSpoiler && setRevealedSpoilers(prev => [...prev, selectedPost.id])}
+                               >
+                                   {selectedPost.type === 'image' && selectedPost.image && (
+                                       <div className="rounded-lg border-2 border-neon-blue/20 bg-black flex justify-center overflow-hidden shadow-[0_0_30px_rgba(0,247,255,0.05)]">
+                                           <img src={selectedPost.image} className="max-h-[600px] w-auto object-contain" alt="Post"/>
+                                       </div>
+                                   )}
+                                   
+                                   {selectedPost.type === 'link' && selectedPost.linkUrl && (
+                                       <a href={selectedPost.linkUrl} target="_blank" rel="noreferrer" className="block p-4 bg-neon-blue/10 border border-neon-blue/30 rounded text-neon-blue hover:underline truncate">
+                                           🔗 {selectedPost.linkUrl}
+                                       </a>
+                                   )}
 
-                               <p className="text-gray-200 whitespace-pre-wrap mb-12 font-body leading-relaxed text-base md:text-lg bg-black/20 p-4 rounded border-l-2 border-neon-blue/50">{selectedPost.content}</p>
+                                   {selectedPost.type === 'poll' && selectedPost.pollOptions && (
+                                       <div className="bg-black/40 border border-white/10 rounded-xl p-4">
+                                           {selectedPost.pollOptions.map(opt => {
+                                               const total = selectedPost.pollTotalVotes || 1; // prevent div/0
+                                               const percent = Math.round((opt.votes / total) * 100);
+                                               const isChosen = selectedPost.userPollSelection === opt.id;
+                                               return (
+                                                   <div key={opt.id} onClick={() => !selectedPost.userPollSelection && handlePollVote(selectedPost.id, opt.id)} className={`relative mb-3 h-10 rounded cursor-pointer overflow-hidden border ${isChosen ? 'border-neon-green' : 'border-transparent'}`}>
+                                                       <div className="absolute inset-0 bg-gray-800"></div>
+                                                       <div className={`absolute inset-0 bg-neon-blue/30 transition-all duration-1000`} style={{ width: `${percent}%` }}></div>
+                                                       <div className="absolute inset-0 flex items-center justify-between px-4 z-10">
+                                                           <span className="font-bold text-sm text-white">{opt.text} {isChosen && '✓'}</span>
+                                                           <span className="font-mono text-xs">{percent}% ({opt.votes})</span>
+                                                       </div>
+                                                   </div>
+                                               )
+                                           })}
+                                            <div className="text-xs text-gray-500 text-right font-mono">{selectedPost.pollTotalVotes} votes total</div>
+                                       </div>
+                                   )}
+
+                                   <p className="text-gray-200 whitespace-pre-wrap mt-6 font-body leading-relaxed text-base md:text-lg bg-black/20 p-4 rounded border-l-2 border-neon-blue/50">{selectedPost.content}</p>
+                               </div>
+
+                               {/* Action Footer */}
+                               <div className="flex gap-4 mb-8 pb-4 border-b border-white/5">
+                                   <button onClick={() => handlePostSave(selectedPost.id)} className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest ${selectedPost.isSaved ? 'text-neon-green' : 'text-gray-500 hover:text-white'}`}>
+                                       <svg className="w-4 h-4" fill={selectedPost.isSaved ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
+                                       {selectedPost.isSaved ? 'Signal Saved' : 'Save Signal'}
+                                   </button>
+                                   <button onClick={() => handleGiveAward(selectedPost.id)} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-yellow-400 transition-colors">
+                                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                       Offer Soul
+                                   </button>
+                               </div>
 
                                {/* Comment Section */}
-                               <div className="border-t border-neon-blue/20 pt-8 relative">
-                                   <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-[#0f172a] px-4 py-1 border border-neon-blue/30 rounded-full text-neon-blue text-xs font-bold uppercase tracking-widest">
-                                       Data Stream
+                               <div className="pt-4 relative">
+                                   <div className="flex justify-between items-center mb-6">
+                                        <div className="bg-[#0f172a] px-4 py-1 border border-neon-blue/30 rounded-full text-neon-blue text-xs font-bold uppercase tracking-widest">
+                                            Data Stream
+                                        </div>
+                                        {/* Comment Sort */}
+                                        <select 
+                                            value={commentSort} 
+                                            onChange={(e) => setCommentSort(e.target.value as any)}
+                                            className="bg-black border border-gray-700 text-xs text-gray-400 rounded px-2 py-1 outline-none focus:border-neon-blue"
+                                        >
+                                            <option value="best">Best</option>
+                                            <option value="new">Newest</option>
+                                            <option value="old">Oldest</option>
+                                        </select>
                                    </div>
 
                                    <div className="mb-8 bg-[#050a14] p-4 rounded-xl border border-white/10 focus-within:border-neon-blue focus-within:shadow-[0_0_20px_rgba(0,247,255,0.1)] transition-all mt-4">
@@ -640,14 +836,23 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                                {/* Abstract BG element */}
                                <div className="absolute right-0 top-0 h-full w-1/2 bg-gradient-to-l from-neon-blue/10 to-transparent transform skew-x-12"></div>
                                
-                               <div className="relative z-10 flex items-center gap-6">
-                                   <div className="filter drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
-                                       <CommunityIcon icon={currentCommunity.icon} size="xl"/>
+                               <div className="relative z-10 flex justify-between items-start">
+                                   <div className="flex items-center gap-6">
+                                        <div className="filter drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
+                                            <CommunityIcon icon={currentCommunity.icon} size="xl"/>
+                                        </div>
+                                        <div>
+                                            <h2 className="text-3xl font-tech font-bold text-white mb-1 tracking-wide">{currentCommunity.name}</h2>
+                                            <p className="text-neon-blue/70 text-sm font-mono">{currentCommunity.description}</p>
+                                            <div className="mt-2 text-xs text-gray-500">Creator: {currentCommunity.creatorId || 'Unknown'}</div>
+                                        </div>
                                    </div>
-                                   <div>
-                                       <h2 className="text-3xl font-tech font-bold text-white mb-1 tracking-wide">{currentCommunity.name}</h2>
-                                       <p className="text-neon-blue/70 text-sm font-mono">{currentCommunity.description}</p>
-                                   </div>
+                                   <button 
+                                        onClick={() => handleJoinToggle(currentCommunity.id)}
+                                        className={`px-6 py-2 font-bold uppercase tracking-widest rounded border transition-all ${joinedCommunities.includes(currentCommunity.id) ? 'border-gray-600 text-gray-400 hover:border-red-500 hover:text-red-500' : 'bg-neon-blue text-black border-neon-blue hover:bg-white'}`}
+                                   >
+                                       {joinedCommunities.includes(currentCommunity.id) ? 'Sever Contract' : 'Sign Contract'}
+                                   </button>
                                </div>
                           </div>
                       )}
@@ -666,18 +871,27 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                       </div>
 
                       {/* Post List */}
-                      {processedPosts.length > 0 ? processedPosts.map(post => (
+                      {processedPosts.length > 0 ? processedPosts.map(post => {
+                          const isHidden = post.isSpoiler && !revealedSpoilers.includes(post.id);
+                          return (
                           <div 
                               key={post.id} 
                               onClick={() => openPost(post)}
-                              className="relative group bg-[#0f1623] border border-white/5 hover:border-neon-blue/40 rounded-lg overflow-hidden transition-all duration-300 cursor-pointer flex hover:shadow-[0_0_20px_rgba(0,247,255,0.05)] hover:-translate-y-1"
+                              className={`relative group bg-[#0f1623] border ${post.isPinned ? 'border-neon-green/40' : 'border-white/5'} hover:border-neon-blue/40 rounded-lg overflow-hidden transition-all duration-300 cursor-pointer flex hover:shadow-[0_0_20px_rgba(0,247,255,0.05)] hover:-translate-y-1`}
                           >
+                               {post.isPinned && <div className="absolute top-0 right-0 w-0 h-0 border-t-[30px] border-t-neon-green border-l-[30px] border-l-transparent z-20"></div>}
+                               
                                <div className="w-12 bg-[#0b121b] border-r border-white/5 flex flex-col items-center pt-4 hidden md:flex group-hover:border-neon-blue/20 transition-colors">
                                    <VoteControl 
                                        likes={post.likes} 
                                        userVote={post.userVote} 
                                        onVote={(t) => handleVote(post.id, t)} 
                                    />
+                                   {post.isSaved && (
+                                       <span className="mt-4 text-neon-green" title="Saved">
+                                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/></svg>
+                                       </span>
+                                   )}
                                </div>
                                <div className="p-5 flex-1 relative">
                                    {/* Subtle bg glow on hover */}
@@ -694,13 +908,26 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                                        
                                        <div className="flex gap-6">
                                             <div className="flex-1">
-                                                <h3 className="text-lg md:text-xl font-bold text-white mb-3 leading-snug group-hover:text-neon-blue transition-colors font-body">{post.title}</h3>
-                                                {!post.image && <p className="text-sm text-gray-400 line-clamp-2 mb-2 leading-relaxed font-light">{post.content}</p>}
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    {post.isNsfw && <span className="text-[9px] border border-red-500 text-red-500 px-1 rounded">NSFW</span>}
+                                                    {post.isSpoiler && <span className="text-[9px] border border-yellow-500 text-yellow-500 px-1 rounded">SPOILER</span>}
+                                                    {post.type === 'poll' && <span className="text-[9px] bg-gray-700 text-white px-1 rounded">POLL</span>}
+                                                    <h3 className="text-lg md:text-xl font-bold text-white leading-snug group-hover:text-neon-blue transition-colors font-body">{post.title}</h3>
+                                                </div>
+                                                
+                                                <div className={`text-sm text-gray-400 line-clamp-2 mb-2 leading-relaxed font-light ${isHidden ? 'filter blur-sm' : ''}`}>
+                                                    {post.type === 'text' ? post.content : (post.type === 'poll' ? '📊 Interactive Poll' : 'Click to view content')}
+                                                </div>
                                             </div>
-                                            {post.image && (
+                                            {post.image && !isHidden && !post.isNsfw && (
                                                <div className="w-24 h-24 md:w-32 md:h-32 rounded border border-gray-700 bg-black flex-shrink-0 overflow-hidden group-hover:border-neon-blue/50 transition-colors">
                                                     <img src={post.image} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all group-hover:scale-105" alt="preview"/>
                                                </div>
+                                            )}
+                                            {(post.isNsfw || isHidden) && post.image && (
+                                                <div className="w-24 h-24 bg-gray-900 flex items-center justify-center border border-gray-700 text-[10px] text-gray-500 font-mono text-center p-2">
+                                                    {post.isNsfw ? 'SINFUL CONTENT' : 'HAZARD BLUR'}
+                                                </div>
                                             )}
                                        </div>
 
@@ -714,6 +941,12 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                                                {post.replies} <span className="hidden sm:inline">COMMENTS</span>
                                            </div>
                                            
+                                           {(post.awards || 0) > 0 && (
+                                               <span className="text-yellow-500 text-xs font-bold flex items-center gap-1">
+                                                   👻 {post.awards}
+                                               </span>
+                                           )}
+
                                            {post.tags.map(tag => (
                                                <span key={tag} className="text-[10px] uppercase border border-gray-700 px-2 py-0.5 rounded text-gray-500 group-hover:border-neon-blue/30 group-hover:text-neon-blue/70 transition-colors">
                                                    #{tag}
@@ -723,10 +956,10 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                                    </div>
                                </div>
                           </div>
-                      )) : (
+                      )}) : (
                           <div className="text-center py-20 border-2 border-dashed border-gray-800 rounded-xl bg-black/20">
                               <div className="text-4xl mb-4 grayscale opacity-20 animate-pulse">📡</div>
-                              <div className="text-gray-500 font-mono">NO SIGNALS INTERCEPTED</div>
+                              <div className="text-gray-500 font-mono">NO SIGNALS FOUND. {selectedCommunityId === 'all' && joinedCommunities.length <= 1 ? "Try joining some channels!" : ""}</div>
                           </div>
                       )}
                   </div>
@@ -749,9 +982,9 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                           {currentCommunity.description}
                       </p>
                       
-                      <div className="grid grid-cols-2 gap-3 text-center">
+                      <div className="grid grid-cols-2 gap-3 text-center mb-6">
                           <div className="flex flex-col p-3 bg-black border border-gray-800 rounded hover:border-neon-blue/30 transition-colors">
-                              <span className="text-lg font-bold text-white font-mono">666k</span>
+                              <span className="text-lg font-bold text-white font-mono">{currentCommunity.memberCount}</span>
                               <span className="text-xs text-neon-blue/50 uppercase tracking-widest">Sinners</span>
                           </div>
                           <div className="flex flex-col p-3 bg-black border border-gray-800 rounded hover:border-neon-green/30 transition-colors">
@@ -763,22 +996,15 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                           </div>
                       </div>
 
-                      <div className="mt-6 pt-6 border-t border-white/5 text-center">
-                          <h4 className="text-[10px] text-gray-500 uppercase tracking-widest mb-3">Top Contributors</h4>
-                          <div className="flex justify-center -space-x-2">
-                              {[1,2,3].map(i => (
-                                  <div key={i} className="w-8 h-8 rounded-full bg-gray-800 border-2 border-[#0b1016] hover:scale-110 transition-transform hover:z-10 hover:border-neon-blue"></div>
-                              ))}
-                          </div>
-                      </div>
+                      {currentCommunity.id !== 'all' && (
+                           <button 
+                              onClick={() => handleJoinToggle(currentCommunity.id)}
+                              className={`w-full py-2 mb-4 font-bold uppercase tracking-widest rounded text-sm border transition-all ${joinedCommunities.includes(currentCommunity.id) ? 'border-gray-600 text-gray-400 hover:border-red-500 hover:text-red-500' : 'bg-white text-black border-white hover:bg-neon-blue hover:border-neon-blue'}`}
+                           >
+                               {joinedCommunities.includes(currentCommunity.id) ? 'Sever Contract' : 'Sign Contract'}
+                           </button>
+                      )}
                   </div>
-              </div>
-              
-              {/* Footer Links */}
-              <div className="mt-6 text-[10px] text-gray-700 text-center px-4 leading-loose font-mono">
-                  <span className="hover:text-neon-blue cursor-pointer">PROTOCOL 66</span> • <span className="hover:text-neon-blue cursor-pointer">PRIVACY</span> • <span className="hover:text-neon-blue cursor-pointer">TERMS</span> <br/>
-                  <span className="text-neon-red opacity-50 hover:opacity-100 cursor-pointer">DO NOT SELL MY SOUL</span> <br/>
-                  © 2024 VOXTEK ENTERPRISES. OBEY.
               </div>
           </div>
 
@@ -792,16 +1018,12 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                   onClick={e => e.stopPropagation()}
               >
                   <div className="p-4 border-b border-white/5 flex justify-between items-center bg-black/50">
-                      <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-neon-red animate-pulse rounded-full"></div>
-                          <h3 className="text-white font-tech text-lg tracking-widest uppercase">Initialize Broadcast</h3>
-                      </div>
+                      <h3 className="text-white font-tech text-lg tracking-widest uppercase">Initialize Broadcast</h3>
                       <button onClick={() => setIsCreateModalOpen(false)} className="text-gray-500 hover:text-neon-red text-2xl">&times;</button>
                   </div>
                   
                   <div className="p-6 overflow-y-auto custom-scrollbar bg-tv-grid">
                       <div className="mb-4">
-                          <label className="text-[10px] uppercase text-neon-blue/70 font-bold tracking-widest mb-1 block">Frequency Channel</label>
                           <select 
                               value={postCommunityId} 
                               onChange={(e) => setPostCommunityId(e.target.value)}
@@ -814,6 +1036,19 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                           </select>
                       </div>
 
+                      {/* Type Tabs */}
+                      <div className="flex gap-2 mb-4">
+                          {(['text', 'image', 'link', 'poll'] as const).map(t => (
+                              <button 
+                                key={t}
+                                onClick={() => setPostType(t)}
+                                className={`flex-1 py-2 text-xs font-bold uppercase tracking-widest border rounded ${postType === t ? 'bg-neon-blue text-black border-neon-blue' : 'bg-black text-gray-500 border-gray-700 hover:text-white'}`}
+                              >
+                                  {t}
+                              </button>
+                          ))}
+                      </div>
+
                       <div className="mb-4">
                            <input 
                                className="w-full bg-black/50 border border-gray-700 rounded p-3 text-white focus:border-neon-blue focus:outline-none text-lg font-bold placeholder-gray-600 transition-colors font-body"
@@ -824,21 +1059,68 @@ const Forum: React.FC<ForumProps> = ({ user, onViewUserProfile }) => {
                            />
                       </div>
                       
-                      <div className="mb-4">
-                           <input 
-                               className="w-full bg-black/50 border border-gray-700 rounded p-3 text-white focus:border-neon-blue focus:outline-none text-xs font-mono placeholder-gray-600 transition-colors"
-                               placeholder="ATTACH IMAGE URL (OPTIONAL)"
-                               value={newImage}
-                               onChange={e => setNewImage(e.target.value)}
-                           />
-                      </div>
+                      {/* Dynamic Inputs based on Type */}
+                      {postType === 'image' && (
+                          <div className="mb-4">
+                               <input 
+                                   className="w-full bg-black/50 border border-gray-700 rounded p-3 text-white focus:border-neon-blue focus:outline-none text-xs font-mono placeholder-gray-600"
+                                   placeholder="IMAGE URL (https://...)"
+                                   value={newLink}
+                                   onChange={e => setNewLink(e.target.value)}
+                               />
+                          </div>
+                      )}
+                      {postType === 'link' && (
+                          <div className="mb-4">
+                               <input 
+                                   className="w-full bg-black/50 border border-gray-700 rounded p-3 text-white focus:border-neon-blue focus:outline-none text-xs font-mono placeholder-gray-600"
+                                   placeholder="EXTERNAL LINK URL"
+                                   value={newLink}
+                                   onChange={e => setNewLink(e.target.value)}
+                               />
+                          </div>
+                      )}
+                      {postType === 'poll' && (
+                          <div className="mb-4 space-y-2">
+                               {pollOptions.map((opt, idx) => (
+                                   <input 
+                                        key={idx}
+                                        className="w-full bg-black/50 border border-gray-700 rounded p-2 text-white focus:border-neon-blue focus:outline-none text-sm placeholder-gray-600"
+                                        placeholder={`Option ${idx + 1}`}
+                                        value={opt}
+                                        onChange={e => {
+                                            const newOpts = [...pollOptions];
+                                            newOpts[idx] = e.target.value;
+                                            setPollOptions(newOpts);
+                                        }}
+                                   />
+                               ))}
+                               <button 
+                                onClick={() => setPollOptions([...pollOptions, ''])} 
+                                className="text-xs text-neon-blue hover:underline"
+                               >
+                                   + Add Option
+                               </button>
+                          </div>
+                      )}
 
                       <textarea 
-                          className="w-full h-48 bg-black/50 border border-gray-700 rounded p-4 text-white focus:border-neon-blue focus:outline-none mb-2 transition-colors font-mono text-sm resize-none placeholder-gray-600"
-                          placeholder="TRANSMISSION DATA..."
+                          className="w-full h-32 bg-black/50 border border-gray-700 rounded p-4 text-white focus:border-neon-blue focus:outline-none mb-4 transition-colors font-mono text-sm resize-none placeholder-gray-600"
+                          placeholder="OPTIONAL BODY TEXT..."
                           value={newContent}
                           onChange={e => setNewContent(e.target.value)}
                       />
+
+                      <div className="flex gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="checkbox" checked={isNsfw} onChange={e => setIsNsfw(e.target.checked)} className="accent-red-500"/>
+                              <span className="text-xs font-bold text-red-500">NSFW</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="checkbox" checked={isSpoiler} onChange={e => setIsSpoiler(e.target.checked)} className="accent-yellow-500"/>
+                              <span className="text-xs font-bold text-yellow-500">SPOILER</span>
+                          </label>
+                      </div>
                   </div>
 
                   <div className="p-4 border-t border-white/5 bg-black/50 flex justify-end gap-3">

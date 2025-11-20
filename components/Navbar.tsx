@@ -1,6 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../types';
+import { backend } from '../services/backend';
 
 interface NavbarProps {
   activeTab: 'home' | 'wiki' | 'forum' | 'episodes' | 'profile';
@@ -10,6 +11,18 @@ interface NavbarProps {
 
 const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, user }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+      // Simple poll for notifications
+      const checkNotifs = async () => {
+          const notifs = await backend.getNotifications();
+          setUnreadCount(notifs.filter(n => !n.read).length);
+      };
+      checkNotifs();
+      const interval = setInterval(checkNotifs, 10000);
+      return () => clearInterval(interval);
+  }, []);
 
   const navItems: { id: 'home' | 'wiki' | 'forum' | 'episodes'; label: string; color: string; borderColor: string }[] = [
     { id: 'home', label: 'HOME', color: 'text-white hover:text-neon-red', borderColor: 'border-neon-red' },
@@ -60,8 +73,22 @@ const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, user }) => {
               ))}
             </div>
             
-            {/* Profile Button */}
-            <div className="ml-8 pl-8 border-l border-white/10 h-10 flex items-center">
+            {/* Profile & Inbox Button */}
+            <div className="ml-8 pl-8 border-l border-white/10 h-10 flex items-center gap-4">
+                {/* Notification Bell - Only visible if not viewing someone else's profile in readonly */}
+                <button 
+                    onClick={() => handleNavClick('profile')}
+                    className="relative text-gray-400 hover:text-neon-blue transition-colors"
+                    title="Notifications (Access via Profile)"
+                >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                    {unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-neon-red text-black text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                            {unreadCount > 9 ? '!' : unreadCount}
+                        </span>
+                    )}
+                </button>
+
                 <button 
                     onClick={() => handleNavClick('profile')}
                     className={`flex items-center gap-3 group ${activeTab === 'profile' ? 'opacity-100' : 'opacity-70 hover:opacity-100'}`}
@@ -79,6 +106,15 @@ const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, user }) => {
 
           {/* Mobile Menu Button */}
           <div className="md:hidden flex items-center z-50 gap-4">
+             <button onClick={() => handleNavClick('profile')} className="relative text-gray-400">
+                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                 {unreadCount > 0 && (
+                     <span className="absolute -top-1 -right-1 bg-neon-red text-black text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                         {unreadCount}
+                     </span>
+                 )}
+             </button>
+
              {/* Mobile Profile Icon */}
              <button onClick={() => handleNavClick('profile')} className="w-8 h-8 rounded-full overflow-hidden border border-gray-500">
                  <img src={user.avatar} alt="User" className="w-full h-full object-cover" />

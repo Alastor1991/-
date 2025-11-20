@@ -1,5 +1,5 @@
 
-import { UserProfile, ForumPost, Episode, Review, Universe, Comment, Community } from '../types';
+import { UserProfile, ForumPost, Episode, Review, Universe, Comment, Community, Notification } from '../types';
 
 // --- SEED COMMUNITIES ---
 const SEED_COMMUNITIES: Community[] = [
@@ -8,42 +8,52 @@ const SEED_COMMUNITIES: Community[] = [
         name: 'r/All',
         description: 'The screams of everyone combined.',
         icon: '🌐',
-        color: 'text-white'
+        color: 'text-white',
+        memberCount: 666666
     },
     {
         id: 'overlords',
         name: 'r/Overlords',
         description: 'Exclusive club for the powerful. If you have to ask, you don\'t belong.',
         icon: '👑',
-        color: 'text-neon-red'
+        color: 'text-neon-red',
+        creatorId: 'RadioDemon',
+        memberCount: 13
     },
     {
         id: 'imp',
         name: 'r/IMP',
         description: 'Immediate Murder Professionals. Client requests & weapon sales.',
         icon: '🔫',
-        color: 'text-neon-red'
+        color: 'text-neon-red',
+        creatorId: 'Blitzo',
+        memberCount: 4
     },
     {
         id: 'sinners',
         name: 'r/Sinners',
         description: 'General chat for the damned. Rants, drama, and extermination tips.',
         icon: '🔥',
-        color: 'text-neon-blue'
+        color: 'text-neon-blue',
+        memberCount: 1540
     },
     {
         id: 'hazbin',
         name: 'r/HazbinHotel',
         description: 'Redemption is possible! (Maybe). Discuss Charlie\'s project.',
         icon: '🏨',
-        color: 'text-neon-pink'
+        color: 'text-neon-pink',
+        creatorId: 'Charlie',
+        memberCount: 50
     },
     {
         id: 'tech',
         name: 'r/VoxTek',
         description: 'Support forum for VoxTek products. All hail Vox.',
         icon: '📺',
-        color: 'text-neon-blue'
+        color: 'text-neon-blue',
+        creatorId: 'Vox',
+        memberCount: 10000
     }
 ];
 
@@ -125,10 +135,14 @@ const SEED_POSTS: ForumPost[] = [
     avatar: 'https://upload.wikimedia.org/wikipedia/en/e/e2/Alastor_Hazbin_Hotel.png',
     title: 'О посредственности современного телевидения',
     content: 'Визуал для слабоумных! Истинный ужас и восторг кроются в радиоволнах. Кто вообще смотрит этот ящик с картинками?',
+    type: 'text',
+    isNsfw: false,
+    isSpoiler: false,
+    isPinned: true,
     likes: 666,
     replies: 3,
     tags: ['Opinion', 'Radio', 'Classic'],
-    timestamp: '2024-05-20T12:00:00Z', // ISO format for sorting
+    timestamp: '2024-05-20T12:00:00Z',
     comments: [
         { id: 'c1', parentId: null, author: 'AngelDust', avatar: 'https://upload.wikimedia.org/wikipedia/en/2/24/Angel_Dust_Hazbin_Hotel.png', content: 'О боже, какая драма! 🍿 Продолжай, я записываю.', likes: 69, timestamp: '5m ago' },
         { id: 'c2', parentId: 'c1', author: 'RadioDemon', avatar: 'https://upload.wikimedia.org/wikipedia/en/e/e2/Alastor_Hazbin_Hotel.png', content: 'Убери свои лапы от клавиатуры, женоподобный паук.', likes: 120, timestamp: '3m ago' },
@@ -142,6 +156,10 @@ const SEED_POSTS: ForumPost[] = [
     avatar: 'https://static.wikia.nocookie.net/hazbinhotel/images/e/e5/Velvette_profile.png',
     title: '#VeesMeeting: Полный провал показа мод',
     content: 'Если я увижу еще одно скучное пальто, я закричу. @Carmilla научи своих дочерей одеваться.',
+    type: 'image',
+    isNsfw: false,
+    isSpoiler: false,
+    isPinned: false,
     likes: 8900,
     replies: 0,
     image: 'https://i.pinimg.com/736x/d3/5a/52/d35a522147759987c661f4339600988c.jpg',
@@ -156,6 +174,10 @@ const SEED_POSTS: ForumPost[] = [
     avatar: 'https://upload.wikimedia.org/wikipedia/en/0/04/Blitzo_Helluva_Boss.png',
     title: 'РАСПРОДАЖА ОРУЖИЯ! ИЩЕМ КЛИЕНТОВ!',
     content: 'Если у вас есть бывшая, которую нужно убрать, или босс, который вас бесит - звоните в I.M.P! Скидки 50% если цель - клоун.',
+    type: 'text',
+    isNsfw: false,
+    isSpoiler: false,
+    isPinned: false,
     likes: 42,
     replies: 0,
     tags: ['Business', 'Murder', 'Horses'],
@@ -169,10 +191,38 @@ const SEED_POSTS: ForumPost[] = [
     avatar: 'https://static.wikia.nocookie.net/hazbinhotel/images/c/c2/Vox_App.png',
     title: 'VoxTek Drone v7.0 Update Log',
     content: 'Improved surveillance range by 500%. Now with automated soul-tracking algorithms. Trust us with your safety.',
+    type: 'text',
+    isNsfw: false,
+    isSpoiler: false,
+    isPinned: true,
     likes: 15000,
     replies: 0,
     tags: ['Tech', 'Update', 'TrustUs'],
     timestamp: '2024-05-21T10:30:00Z',
+    comments: []
+  },
+  {
+    id: 'p5',
+    communityId: 'sinners',
+    author: 'AngelDust',
+    avatar: 'https://upload.wikimedia.org/wikipedia/en/2/24/Angel_Dust_Hazbin_Hotel.png',
+    title: 'Кто самый горячий в Отеле?',
+    content: 'Просто провожу научное исследование, крошки.',
+    type: 'poll',
+    isNsfw: false,
+    isSpoiler: false,
+    isPinned: false,
+    likes: 6969,
+    replies: 120,
+    tags: ['Poll', 'Hot'],
+    timestamp: '2024-05-22T01:00:00Z',
+    pollOptions: [
+        { id: 'po1', text: 'Я (Angel Dust)', votes: 500 },
+        { id: 'po2', text: 'Husk (Пушистик)', votes: 450 },
+        { id: 'po3', text: 'Alastor (Жуткий)', votes: 200 },
+        { id: 'po4', text: 'Cherri Bomb', votes: 300 }
+    ],
+    pollTotalVotes: 1450,
     comments: []
   }
 ];
@@ -187,7 +237,7 @@ interface DB {
     currentUser: string | null; // username
 }
 
-const DB_KEY = 'HELLS_HUB_DB_V4'; // Bumped version to clear cache logic
+const DB_KEY = 'HELLS_HUB_DB_V5'; // Bumped version
 
 // Helper to simulate network delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -219,14 +269,20 @@ class BackendService {
         const stored = localStorage.getItem(DB_KEY);
         if (stored) {
             this.db = JSON.parse(stored);
-            // If storing empty or old version without communities, seed them
+            // Migrations for new features
             if (!this.db.communities || this.db.communities.length === 0) {
                 this.db.communities = SEED_COMMUNITIES;
             }
-            // Fix for seed episodes if missing
             if (!this.db.episodes) this.db.episodes = SEED_EPISODES;
-            // Fix for posts
             if (!this.db.posts || this.db.posts.length === 0) this.db.posts = SEED_POSTS;
+            
+            // Ensure users have new fields
+            this.db.users.forEach(u => {
+                if (!u.joinedCommunities) u.joinedCommunities = ['all'];
+                if (!u.savedPostIds) u.savedPostIds = [];
+                if (!u.notifications) u.notifications = [];
+            });
+
         } else {
             this.db = {
                 users: [],
@@ -257,7 +313,18 @@ class BackendService {
                 joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
                 watchedEpisodes: [],
                 ratings: {},
-                reviews: []
+                reviews: [],
+                joinedCommunities: ['all'],
+                savedPostIds: [],
+                notifications: [
+                    {
+                        id: 'welcome', 
+                        type: 'system', 
+                        message: 'Welcome to Hell\'s Hub. Obey the Overlords.', 
+                        read: false, 
+                        timestamp: new Date().toISOString()
+                    }
+                ]
             };
             this.db.users.push(user);
         }
@@ -284,7 +351,7 @@ class BackendService {
         const user = this.db.users.find(u => u.username.toLowerCase() === username.toLowerCase());
         if (user) return user;
 
-        // Generate mock profile if looking up a seed user (like RadioDemon) who hasn't logged in
+        // Mock profile for static seeds
         const seedUsers = ['RadioDemon', 'Vox', 'Velvette', 'Blitzo', 'AngelDust'];
         if (seedUsers.includes(username)) {
              return {
@@ -294,7 +361,9 @@ class BackendService {
                 joinedDate: 'Since the beginning',
                 watchedEpisodes: [],
                 ratings: {},
-                reviews: []
+                reviews: [],
+                joinedCommunities: ['overlords'],
+                savedPostIds: []
              }
         }
 
@@ -309,6 +378,20 @@ class BackendService {
         this.db.users[index] = { ...this.db.users[index], ...updates };
         this.save();
         return this.db.users[index];
+    }
+
+    // --- NOTIFICATIONS ---
+    async getNotifications(): Promise<Notification[]> {
+        const user = this.db.users.find(u => u.username === this.db.currentUser);
+        if (!user) return [];
+        return user.notifications || [];
+    }
+
+    async markNotificationsRead(): Promise<void> {
+        const user = this.db.users.find(u => u.username === this.db.currentUser);
+        if (!user || !user.notifications) return;
+        user.notifications.forEach(n => n.read = true);
+        this.save();
     }
 
     // --- EPISODES ---
@@ -351,7 +434,7 @@ class BackendService {
         return newReview;
     }
 
-    // --- FORUM ---
+    // --- FORUM - COMMUNITIES ---
 
     async getCommunities(): Promise<Community[]> {
         return this.db.communities;
@@ -359,33 +442,117 @@ class BackendService {
 
     async createCommunity(community: Community): Promise<Community> {
         await delay(600);
-        // Ensure no duplicates ID or case-insensitive Name
+        // Duplicate check name
         if (this.db.communities.find(c => c.id === community.id || c.name.toLowerCase() === community.name.toLowerCase())) {
             throw new Error("Community already exists");
         }
+        // Set current user as creator
+        community.creatorId = this.db.currentUser || undefined;
         this.db.communities.push(community);
+        
+        // Auto-join the creator
+        if (this.db.currentUser) {
+            const user = this.db.users.find(u => u.username === this.db.currentUser);
+            if (user) {
+                user.joinedCommunities.push(community.id);
+            }
+        }
+
         this.save();
         return community;
     }
 
+    async toggleJoinCommunity(communityId: string): Promise<boolean> {
+        await delay(200);
+        const user = this.db.users.find(u => u.username === this.db.currentUser);
+        if (!user) throw new Error("Not logged in");
+
+        if (user.joinedCommunities.includes(communityId)) {
+            user.joinedCommunities = user.joinedCommunities.filter(id => id !== communityId);
+            this.save();
+            return false; // Joined = false
+        } else {
+            user.joinedCommunities.push(communityId);
+            this.save();
+            return true; // Joined = true
+        }
+    }
+
+    // --- FORUM - POSTS ---
+
     async getPosts(): Promise<ForumPost[]> {
         await delay(400);
-        // Return raw posts
+        const user = this.db.users.find(u => u.username === this.db.currentUser);
+        
         return this.db.posts.map(p => ({
             ...p,
             timestamp: formatTime(p.timestamp),
-            userVote: 0 // Reset local vote state on refresh
+            userVote: 0,
+            isSaved: user?.savedPostIds.includes(p.id) || false
         }));
     }
 
     async createPost(post: ForumPost): Promise<ForumPost> {
         await delay(500);
-        // Set timestamp to ISO for sorting
         const newPost = { ...post, timestamp: new Date().toISOString() };
         this.db.posts.unshift(newPost);
         this.save();
-        // Return formatted
         return { ...newPost, timestamp: 'Just now' };
+    }
+
+    async deletePost(postId: string): Promise<void> {
+        await delay(300);
+        this.db.posts = this.db.posts.filter(p => p.id !== postId);
+        this.save();
+    }
+
+    async togglePinPost(postId: string): Promise<boolean> {
+        await delay(100);
+        const post = this.db.posts.find(p => p.id === postId);
+        if (post) {
+            post.isPinned = !post.isPinned;
+            this.save();
+            return post.isPinned;
+        }
+        return false;
+    }
+
+    async toggleSavePost(postId: string): Promise<boolean> {
+        await delay(100);
+        const user = this.db.users.find(u => u.username === this.db.currentUser);
+        if (!user) return false;
+
+        if (user.savedPostIds.includes(postId)) {
+            user.savedPostIds = user.savedPostIds.filter(id => id !== postId);
+            this.save();
+            return false;
+        } else {
+            user.savedPostIds.push(postId);
+            this.save();
+            return true;
+        }
+    }
+
+    async giveAward(postId: string): Promise<void> {
+        await delay(100);
+        const post = this.db.posts.find(p => p.id === postId);
+        if (post) {
+            post.awards = (post.awards || 0) + 1;
+            
+            // Notify author
+            const author = this.db.users.find(u => u.username === post.author);
+            if (author) {
+                author.notifications?.unshift({
+                    id: Date.now().toString(),
+                    type: 'award',
+                    message: `User ${this.db.currentUser} gave your post a Soul!`,
+                    read: false,
+                    timestamp: new Date().toISOString(),
+                    linkId: postId
+                });
+            }
+            this.save();
+        }
     }
 
     async addComment(postId: string, comment: Comment): Promise<ForumPost> {
@@ -397,8 +564,23 @@ class BackendService {
         post.comments.push(comment);
         post.replies = post.comments.length;
         
+        // Mock Notification for Post Author (if not self)
+        if (post.author !== this.db.currentUser) {
+            const author = this.db.users.find(u => u.username === post.author);
+            if (author) {
+                if(!author.notifications) author.notifications = [];
+                author.notifications.unshift({
+                    id: Date.now().toString(),
+                    type: 'reply',
+                    message: `${comment.author} replied to your signal: "${comment.content.substring(0, 20)}..."`,
+                    linkId: postId,
+                    read: false,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        }
+
         this.save();
-        // Format timestamp for display return
         return { ...post, timestamp: formatTime(post.timestamp) };
     }
 
@@ -406,30 +588,34 @@ class BackendService {
         await delay(100);
         const post = this.db.posts.find(p => p.id === postId);
         if (!post) throw new Error("Post not found");
-        
         post.likes += amount;
         this.save();
         return post.likes;
+    }
+
+    async votePoll(postId: string, optionId: string): Promise<ForumPost | null> {
+        await delay(200);
+        const post = this.db.posts.find(p => p.id === postId);
+        if (!post || !post.pollOptions) return null;
+
+        const option = post.pollOptions.find(o => o.id === optionId);
+        if (option) {
+            option.votes++;
+            post.pollTotalVotes = (post.pollTotalVotes || 0) + 1;
+            this.save();
+        }
+        
+        return {
+            ...post,
+            timestamp: formatTime(post.timestamp),
+            userPollSelection: optionId 
+        };
     }
 
     async voteComment(postId: string, commentId: string, amount: number): Promise<void> {
         await delay(100);
         const post = this.db.posts.find(p => p.id === postId);
         if (!post || !post.comments) return;
-
-        const findAndUpdate = (comments: Comment[]): boolean => {
-            for (const c of comments) {
-                if (c.id === commentId) {
-                    c.likes += amount;
-                    return true;
-                }
-                // Since we store flat list in DB but tree in UI, backend has flat list.
-                // However, if we were using recursive structure in DB, we'd recurse here.
-                // Our current mock DB stores comments as a flat array in the post object.
-            }
-            return false;
-        };
-
         const comment = post.comments.find(c => c.id === commentId);
         if (comment) {
             comment.likes += amount;
